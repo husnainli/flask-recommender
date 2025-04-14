@@ -7,6 +7,7 @@ from IPython.display import Image, display
 from collections import defaultdict
 import numpy as np
 from flask_cors import CORS  
+import os
 
 
 # MongoDB Configuration
@@ -284,5 +285,6 @@ def get_top_100_picks():
 
 
 if __name__ == '__main__':
-    app.run(debug=True, threaded=True)
+    port = int(os.environ.get('PORT', 5000))  # Render sets PORT env variable
+    app.run(host='0.0.0.0', port=port, debug=True, threaded=True)
 
