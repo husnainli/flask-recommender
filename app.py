@@ -3,7 +3,6 @@ from pymongo import MongoClient
 from bson import ObjectId
 import torch
 import torch.nn as nn
-from IPython.display import Image, display
 from collections import defaultdict
 import numpy as np
 from flask_cors import CORS  
