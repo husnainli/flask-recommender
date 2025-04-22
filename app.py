@@ -1,8 +1,5 @@
 from pymongo import MongoClient
 from bson import ObjectId
-import asyncio
-from motor.motor_asyncio import AsyncIOMotorClient
-import nest_asyncio
 from pprint import pprint
 from collections import defaultdict
 from collections import Counter
@@ -14,7 +11,6 @@ import math
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import os
-
 
 MONGODB_URI = "mongodb+srv://AhmadJabbar:0uU29STyRwhoxV0X@shopsavvy.xaqy1.mongodb.net/"
 DATABASE_NAME = "test"
@@ -29,36 +25,22 @@ CATEGORY_VOCAB = [
     "Bodysuits", "Co-ords", "Dresses & Skirts", "Fur & Fleece", "Studio", "TrueBody"
 ]
 
-async def fetch_all_data(user_id, user_id_str):
-    # Create independent MongoDB clients for parallelism
-    clients = [AsyncIOMotorClient(MONGODB_URI) for _ in range(8)]
-    dbs = [c[DATABASE_NAME] for c in clients]
+# Setup MongoDB client
+client = MongoClient(MONGODB_URI)
+db = client[DATABASE_NAME]
 
-    # Perform all fetches in parallel
-    results = await asyncio.gather(
-        dbs[0]["filters"].find_one({ "userId": user_id }),
-        dbs[1]["aggregatedfilters"].find_one({ "userId": user_id }),
-        dbs[2]["typeinterests"].find_one({ "userId": user_id }),
-        dbs[3]["aggregatedtypeinterests"].find_one({ "userId": user_id }),
-        dbs[4]["accounts"].find_one({ "_id": user_id }, { "wishlist": 1, "_id": 0 }),
-        dbs[5]["userrecentproductclicks"].find_one({ "userId": user_id_str }),
-        dbs[6]["userproductclickaggregates"].find_one({ "userId": user_id_str }),
-        dbs[7]["products"].find().to_list(length=None)
-    )
+def fetch_all_data(user_id, user_id_str):
+    # Perform all queries sequentially using pymongo (synchronously)
+    recent_filters = db["filters"].find_one({ "userId": user_id })
+    aggregated_filters = db["aggregatedfilters"].find_one({ "userId": user_id })
+    recent_type_interests = db["typeinterests"].find_one({ "userId": user_id })
+    aggregated_type_interests = db["aggregatedtypeinterests"].find_one({ "userId": user_id })
+    user_doc = db["accounts"].find_one({ "_id": user_id }, { "wishlist": 1, "_id": 0 })
+    recent_clicks_doc = db["userrecentproductclicks"].find_one({ "userId": user_id_str })
+    aggregated_clicks_doc = db["userproductclickaggregates"].find_one({ "userId": user_id_str })
+    all_products = list(db["products"].find())
 
-    # Close all clients
-    for c in clients:
-        c.close()
-
-    # Unpack results
-    (
-        recent_filters, aggregated_filters,
-        recent_type_interests, aggregated_type_interests,
-        user_doc, recent_clicks_doc,
-        aggregated_clicks_doc, all_products
-    ) = results
-
-    # Return structured dict
+    # Return structured data
     return {
         "recent_filters": recent_filters,
         "aggregated_filters": aggregated_filters,
@@ -632,8 +614,8 @@ async def get_top_100_picks():
     user_id_str = request.args.get('user_id')
     user_id = ObjectId(user_id_str)
 
-    # Fetch all data asynchronously
-    data = await fetch_all_data(user_id, str(user_id))
+    # Fetch all data synchronously
+    data = fetch_all_data(user_id, str(user_id))
 
     # Process the data to compute different scores
     all_cosine_scores_filter = process_applied_filters(data)

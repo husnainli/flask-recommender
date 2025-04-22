@@ -1,11 +1,6 @@
 flask
 flask-cors
 pymongo
-motor
 torch
 numpy
 gunicorn
-nest_asyncio
-uvicorn
-asgi-flask
-asgi-lifespan
