@@ -643,5 +643,5 @@ async def get_top_100_picks():
     return jsonify(top_100_products_json)
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))  # Render sets PORT env variable
+    port = int(os.environ.get('PORT', 5050))  # Render sets PORT env variable
     app.run(host='0.0.0.0', port=port, debug=True, threaded=True)
