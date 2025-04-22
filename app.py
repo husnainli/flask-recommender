@@ -15,6 +15,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import os
 
+
 MONGODB_URI = "mongodb+srv://AhmadJabbar:0uU29STyRwhoxV0X@shopsavvy.xaqy1.mongodb.net/"
 DATABASE_NAME = "test"
 
