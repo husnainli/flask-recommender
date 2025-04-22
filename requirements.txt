@@ -6,4 +6,3 @@ torch
 numpy
 gunicorn
 nest_asyncio
-bson
