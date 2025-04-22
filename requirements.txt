@@ -1,6 +1,9 @@
 flask
 flask-cors
 pymongo
+motor
 torch
 numpy
 gunicorn
+nest_asyncio
+bson
