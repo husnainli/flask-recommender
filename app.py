@@ -609,38 +609,49 @@ app = Flask(__name__)
 CORS(app)
 
 @app.route('/get-top-100', methods=['GET'])
-async def get_top_100_picks():
-    # Extract the user_id from the request arguments
-    user_id_str = request.args.get('user_id')
-    user_id = ObjectId(user_id_str)
+def get_top_100_picks():
+    try:
+        user_id_str = request.args.get('user_id')
+        print(f"User ID (raw): {user_id_str}")
+        
+        user_id = ObjectId(user_id_str)
+        print(f"Parsed ObjectId: {user_id}")
 
-    # Fetch all data synchronously
-    data = fetch_all_data(user_id, str(user_id))
+        data = fetch_all_data(user_id, user_id_str)
+        print("✅ Data fetched successfully")
 
-    # Process the data to compute different scores
-    all_cosine_scores_filter = process_applied_filters(data)
-    all_type_scores = process_type_interest(data)
-    all_wishlist_scores = process_wishlist(data)
-    all_product_scores = process_user_click_data(data)
+        all_cosine_scores_filter = process_applied_filters(data)
+        print("✅ Filters processed")
 
-    # Calculate the final top 100 products based on scores
-    top_100_products = calculate_final_recommendations(
-        data,
-        all_product_scores,
-        all_wishlist_scores,
-        all_type_scores,
-        all_cosine_scores_filter
-    )
+        all_type_scores = process_type_interest(data)
+        print("✅ Type interests processed")
 
-    # Extract relevant product data for returning as JSON
-    top_100_products_json = [{
-        "product_id": item["product_id"],
-        "product": item["product"],
-        "final_cosine_score": item["final_cosine_score"]
-    } for item in top_100_products]
+        all_wishlist_scores = process_wishlist(data)
+        print("✅ Wishlist processed")
 
-    # Return the top 100 products as a JSON response
-    return jsonify(top_100_products_json)
+        all_product_scores = process_user_click_data(data)
+        print("✅ Click data processed")
+
+        top_100_products = calculate_final_recommendations(
+            data,
+            all_product_scores,
+            all_wishlist_scores,
+            all_type_scores,
+            all_cosine_scores_filter
+        )
+        print("✅ Final recommendations calculated")
+
+        response = [{
+            "product_id": item["product_id"],
+            "product": item["product"],
+            "final_cosine_score": item["final_cosine_score"]
+        } for item in top_100_products]
+
+        return jsonify(response)
+
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5050))  # Render sets PORT env variable
