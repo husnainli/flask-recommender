@@ -386,8 +386,11 @@ def process_wishlist(data):
     
 def process_user_click_data(data):
     try:
-        recent_clicks = data["recent_clicks_doc"].get("clickedProducts", [])
-        aggregated_data = data["aggregated_clicks_doc"].get("aggregateData", {})
+        recent_clicks_doc = data.get("recent_clicks_doc") or {}
+        aggregated_clicks_doc = data.get("aggregated_clicks_doc") or {}
+
+        recent_clicks = recent_clicks_doc.get("clickedProducts", [])
+        aggregated_data = aggregated_clicks_doc.get("aggregateData", {})
 
         if aggregated_data.get("priceHistory"):
             prices = np.sort(aggregated_data["priceHistory"])
@@ -535,7 +538,7 @@ def process_user_click_data(data):
             return results
 
         final_click_vector = build_click_vector(normalized_data)
-        return score_all_products_by_click_vector(data["all_products"], final_click_vector)
+        return score_all_products_by_click_vector(data.get("all_products", []), final_click_vector)
 
     except Exception as e:
         print(f"\n❌ Failed to compute user click data scores: {e}\n")
