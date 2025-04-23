@@ -386,13 +386,14 @@ def process_wishlist(data):
     
 def process_user_click_data(data):
     try:
-        recent_clicks_doc = data.get("recent_clicks_doc") or {}
-        aggregated_clicks_doc = data.get("aggregated_clicks_doc") or {}
+        recent_clicks_doc = data["recent_clicks_doc"] if "recent_clicks_doc" in data else {}
+        aggregated_clicks_doc = data["aggregated_clicks_doc"] if "aggregated_clicks_doc" in data else {}
+        all_products = data["all_products"] if "all_products" in data else []
 
-        recent_clicks = recent_clicks_doc.get("clickedProducts", [])
-        aggregated_data = aggregated_clicks_doc.get("aggregateData", {})
+        recent_clicks = recent_clicks_doc["clickedProducts"] if "clickedProducts" in recent_clicks_doc else []
+        aggregated_data = aggregated_clicks_doc["aggregateData"] if "aggregateData" in aggregated_clicks_doc else {}
 
-        if aggregated_data.get("priceHistory"):
+        if "priceHistory" in aggregated_data:
             prices = np.sort(aggregated_data["priceHistory"])
             trimmed = [p for p in prices if np.percentile(prices, 10) <= p <= np.percentile(prices, 90)]
             aggregated_data["priceMean"] = round(np.mean(trimmed), 2)
@@ -418,12 +419,15 @@ def process_user_click_data(data):
                 ["brand", "filtercolor", "gender", "type"],
                 [brand_counts, filtercolor_counts, gender_counts, type_counts]
             ):
-                counts[product[field]] += score
+                if field in product:
+                    counts[product[field]] += score
 
-            for size in product["sizes"]:
-                size_counts[size] += score
+            if "sizes" in product:
+                for size in product["sizes"]:
+                    size_counts[size] += score
 
-            price_history.extend([product["price"]] * rounded_score)
+            if "price" in product:
+                price_history.extend([product["price"]] * rounded_score)
 
         if price_history:
             sorted_prices = np.sort(price_history)
@@ -452,19 +456,18 @@ def process_user_click_data(data):
             def merge_dicts(r_dict, a_dict):
                 keys = set(r_dict) | set(a_dict)
                 return {
-                    k: r_dict.get(k, 0) * weight_recent + a_dict.get(k, 0) * weight_agg
+                    k: r_dict[k] * weight_recent if k in r_dict else 0 + a_dict[k] * weight_agg if k in a_dict else 0
                     for k in keys
                 }
 
             return {
-                "brandCounts": merge_dicts(recent.get("brandCounts", {}), aggregated.get("brandCounts", {})),
-                "filtercolorCounts": merge_dicts(recent.get("filtercolorCounts", {}), aggregated.get("filtercolorCounts", {})),
-                "genderCounts": merge_dicts(recent.get("genderCounts", {}), aggregated.get("genderCounts", {})),
-                "typeCounts": merge_dicts(recent.get("typeCounts", {}), aggregated.get("typeCounts", {})),
-                "sizeCounts": merge_dicts(recent.get("sizeCounts", {}), aggregated.get("sizeCounts", {})),
-                "priceMean": round(
-                    recent.get("priceMean", 0) * weight_recent + aggregated.get("priceMean", 0) * weight_agg, 2
-                )
+                "brandCounts": merge_dicts(recent["brandCounts"], aggregated["brandCounts"]) if "brandCounts" in recent and "brandCounts" in aggregated else {},
+                "filtercolorCounts": merge_dicts(recent["filtercolorCounts"], aggregated["filtercolorCounts"]) if "filtercolorCounts" in recent and "filtercolorCounts" in aggregated else {},
+                "genderCounts": merge_dicts(recent["genderCounts"], aggregated["genderCounts"]) if "genderCounts" in recent and "genderCounts" in aggregated else {},
+                "typeCounts": merge_dicts(recent["typeCounts"], aggregated["typeCounts"]) if "typeCounts" in recent and "typeCounts" in aggregated else {},
+                "sizeCounts": merge_dicts(recent["sizeCounts"], aggregated["sizeCounts"]) if "sizeCounts" in recent and "sizeCounts" in aggregated else {},
+                "priceMean": round(recent["priceMean"] * weight_recent + aggregated["priceMean"] * weight_agg, 2)
+                if recent["priceMean"] and aggregated["priceMean"] else recent["priceMean"] or aggregated["priceMean"]
             }
 
         final_product_click_data = weighted_merge(recent_aggregated_data, aggregated_data)
@@ -484,7 +487,7 @@ def process_user_click_data(data):
         normalized_data = normalize_product_click_data(final_product_click_data)
 
         def normalize_price(price, min_price=1000, max_price=15000):
-            return round((price - min_price) / (max_price - min_price), 4)
+            return round((price - min_price) / (max_price - min_price), 4) if price is not None else 0
 
         def build_click_vector(data):
             vector = []
@@ -496,8 +499,8 @@ def process_user_click_data(data):
                 "sizeCounts": SIZE_VOCAB,
             }.items():
                 for token in vocab:
-                    vector.append(data.get(key, {}).get(token, 0))
-            vector.append(normalize_price(data.get("priceMean", 0)))
+                    vector.append(data[key][token] if key in data and token in data[key] else 0)
+            vector.append(normalize_price(data["priceMean"]) if "priceMean" in data else 0)
             return vector
 
         def build_product_vector(product):
@@ -511,10 +514,10 @@ def process_user_click_data(data):
             }.items():
                 for token in vocab:
                     if key == "sizes":
-                        vector.append(1 if token in product.get(key, []) else 0)
+                        vector.append(1 if "sizes" in product and token in product["sizes"] else 0)
                     else:
-                        vector.append(1 if product.get(key) == token else 0)
-            vector.append(normalize_price(product.get("price", 0)))
+                        vector.append(1 if key in product and product[key] == token else 0)
+            vector.append(normalize_price(product["price"]) if "price" in product else 0)
             return vector
 
         def score_all_products_by_click_vector(all_products, click_vector):
@@ -528,7 +531,7 @@ def process_user_click_data(data):
                     cosine_sim = F.cosine_similarity(u_vec, p_vec, dim=0).item()
                     results.append({
                         "index": i,
-                        "product_id": str(product.get("_id", f"product_{i}")),
+                        "product_id": str(product["_id"]) if "_id" in product else f"product_{i}",
                         "cosine_score": cosine_sim,
                         "product": product
                     })
@@ -537,8 +540,8 @@ def process_user_click_data(data):
                 return None
             return results
 
-        final_click_vector = build_click_vector(normalized_data)
-        return score_all_products_by_click_vector(data.get("all_products", []), final_click_vector)
+        final_click_vector = build_click_vector(normalized_data) if normalized_data else []
+        return score_all_products_by_click_vector(all_products, final_click_vector)
 
     except Exception as e:
         print(f"\n❌ Failed to compute user click data scores: {e}\n")
