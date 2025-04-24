@@ -385,6 +385,9 @@ def process_wishlist(data):
 
     
 def process_user_click_data(data):
+    def compute_weighted_score(product):
+            score = math.pow(product["visitCount"], 0.9) + (3 if product["redirected"] else 0)
+            return score
     try:
         print("Step 1: Initial data check")
         recent_clicks_doc = data["recent_clicks_doc"] if "recent_clicks_doc" in data else {}
@@ -395,75 +398,72 @@ def process_user_click_data(data):
         print(f"aggregated_clicks_doc: {aggregated_clicks_doc}")
         print(f"all_products: {len(all_products)} products found")
 
-        recent_clicks = recent_clicks_doc["clickedProducts"] if "clickedProducts" in recent_clicks_doc else []
-        aggregated_data = aggregated_clicks_doc["aggregateData"] if "aggregateData" in aggregated_clicks_doc else {}
+        recent_clicks = []
+        aggregated_data = []
+        recent_aggregated_data = []
+        if recent_clicks_doc:
+            recent_clicks = recent_clicks_doc["clickedProducts"]
+            print(f"recent_clicks: {recent_clicks}")
+            
+            brand_counts = defaultdict(float)
+            filtercolor_counts = defaultdict(float)
+            gender_counts = defaultdict(float)
+            type_counts = defaultdict(float)
+            size_counts = defaultdict(float)
+            price_history = []
 
-        print(f"recent_clicks: {len(recent_clicks)} products found")
-        print(f"aggregated_data: {aggregated_data}")
+            for product in recent_clicks:             
+                score = compute_weighted_score(product)
+                rounded_score = math.floor(score)
+                print(f"Rounded score: {rounded_score}")
 
-        if "priceHistory" in aggregated_data:
+                for field, counts in zip(
+                        ["brand", "filtercolor", "gender", "type"],
+                        [brand_counts, filtercolor_counts, gender_counts, type_counts]
+                    ):
+                    if field in product:
+                        counts[product[field]] += score
+                        print(f"Updated count for {field}: {counts[product[field]]}")
+
+                    if "sizes" in product:
+                        for size in product["sizes"]:
+                            size_counts[size] += score
+                            print(f"Updated size count for {size}: {size_counts[size]}")
+
+                    if "price" in product:
+                        price_history.extend([product["price"]] * rounded_score)
+                        print(f"Added price history: {product['price']} x {rounded_score}")
+
+            if price_history:
+                sorted_prices = np.sort(price_history)
+                trimmed_prices = [p for p in sorted_prices if np.percentile(sorted_prices, 10) <= p <= np.percentile(sorted_prices, 90)]
+                price_mean = round(np.mean(trimmed_prices), 2)
+                print(f"Calculated price mean from price history: {price_mean}")
+            else:
+                price_mean = None
+                print("No price history data to calculate price mean.")
+
+            recent_aggregated_data = {
+                "brandCounts": dict(brand_counts),
+                "filtercolorCounts": dict(filtercolor_counts),
+                "genderCounts": dict(gender_counts),
+                "typeCounts": dict(type_counts),
+                "sizeCounts": dict(size_counts),
+                "priceMean": price_mean
+            }
+        if aggregated_clicks_doc:
+            aggregated_data = aggregated_clicks_doc["aggregateData"]
+
+            aggregated_data["priceMean"] = None
             print("Processing priceHistory")
             prices = np.sort(aggregated_data["priceHistory"])
             trimmed = [p for p in prices if np.percentile(prices, 10) <= p <= np.percentile(prices, 90)]
             aggregated_data["priceMean"] = round(np.mean(trimmed), 2)
             del aggregated_data["priceHistory"]
             print(f"Aggregated price mean: {aggregated_data['priceMean']}")
-        else:
-            aggregated_data["priceMean"] = None
-            print("No price history found, priceMean set to None")
 
-        def compute_weighted_score(product):
-            score = math.pow(product["visitCount"], 0.9) + (3 if product["redirected"] else 0)
-            print(f"Computed weighted score for product {product.get('_id', 'unknown')}: {score}")
-            return score
-
-        brand_counts = defaultdict(float)
-        filtercolor_counts = defaultdict(float)
-        gender_counts = defaultdict(float)
-        type_counts = defaultdict(float)
-        size_counts = defaultdict(float)
-        price_history = []
-
-        for product in recent_clicks:
-            print(f"Processing product: {product.get('_id', 'unknown')}")
-            score = compute_weighted_score(product)
-            rounded_score = math.floor(score)
-            print(f"Rounded score: {rounded_score}")
-
-            for field, counts in zip(
-                ["brand", "filtercolor", "gender", "type"],
-                [brand_counts, filtercolor_counts, gender_counts, type_counts]
-            ):
-                if field in product:
-                    counts[product[field]] += score
-                    print(f"Updated count for {field}: {counts[product[field]]}")
-
-            if "sizes" in product:
-                for size in product["sizes"]:
-                    size_counts[size] += score
-                    print(f"Updated size count for {size}: {size_counts[size]}")
-
-            if "price" in product:
-                price_history.extend([product["price"]] * rounded_score)
-                print(f"Added price history: {product['price']} x {rounded_score}")
-
-        if price_history:
-            sorted_prices = np.sort(price_history)
-            trimmed_prices = [p for p in sorted_prices if np.percentile(sorted_prices, 10) <= p <= np.percentile(sorted_prices, 90)]
-            price_mean = round(np.mean(trimmed_prices), 2)
-            print(f"Calculated price mean from price history: {price_mean}")
-        else:
-            price_mean = None
-            print("No price history data to calculate price mean.")
-
-        recent_aggregated_data = {
-            "brandCounts": dict(brand_counts),
-            "filtercolorCounts": dict(filtercolor_counts),
-            "genderCounts": dict(gender_counts),
-            "typeCounts": dict(type_counts),
-            "sizeCounts": dict(size_counts),
-            "priceMean": price_mean
-        }
+        print(f"recent_clicks: {len(recent_clicks)} products found")
+        print(f"aggregated_data: {aggregated_data}")
 
         print("Step 2: Merging recent and aggregated data")
         def weighted_merge(recent, aggregated, weight_recent=0.75, weight_agg=0.25):
@@ -490,7 +490,7 @@ def process_user_click_data(data):
                 "priceMean": round(recent["priceMean"] * weight_recent + aggregated["priceMean"] * weight_agg, 2)
                 if recent["priceMean"] and aggregated["priceMean"] else recent["priceMean"] or aggregated["priceMean"]
             }
-
+        
         final_product_click_data = weighted_merge(recent_aggregated_data, aggregated_data)
         print(f"Final merged product click data: {final_product_click_data}")
 
@@ -543,7 +543,7 @@ def process_user_click_data(data):
                     else:
                         vector.append(1 if key in product and product[key] == token else 0)
             vector.append(normalize_price(product["price"]) if "price" in product else 0)
-            print(f"Built product vector for product {product.get('_id', 'unknown')}: {vector}")
+            # print(f"Built product vector for product {product.get('_id', 'unknown')}: {vector}")
             return vector
 
         def score_all_products_by_click_vector(all_products, click_vector):
